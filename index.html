@@ -257,7 +257,8 @@
     setTimeout(draw, 50);
   }
   $('present').addEventListener('click', () => setPresent(true));
-  if (location.hash === '#present') setPresent(true);
+  // Presentation mode is the default; open with #controls to start in the editing view.
+  if (location.hash !== '#controls') setPresent(true);
   document.addEventListener('fullscreenchange', draw);
   document.addEventListener('keydown', e => {
     if (e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT') return;
