@@ -73,6 +73,20 @@
   .spacer { flex: 1 1 auto; }
   label.opt { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; color: var(--muted); }
   select { font: 14px var(--font-ui); color: var(--fg); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
+  .hint { font-family: var(--font-num); font-size: 12px; color: var(--muted); }
+  .hint kbd { border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
+  /* Presentation mode: hide the toolbar, enlarge everything, keyboard drives it. */
+  body.present { gap: 24px; padding-block: 28px; }
+  body.present .controls { display: none; }
+  body.present .stat .value { font-size: clamp(44px, 9vw, 110px); }
+  body.present .stat .label { font-size: clamp(13px, 1.6vw, 20px); }
+  body.present .stat .sub { font-size: clamp(14px, 1.8vw, 22px); }
+  body.present .coin { width: clamp(92px, 12vw, 150px); }
+  body.present .coin .face { width: clamp(64px, 9vw, 110px); height: clamp(64px, 9vw, 110px); font-size: clamp(26px, 4vw, 48px); }
+  body.present .plot { font-size: 18px; }
+  .presentbar { display: none; position: fixed; right: max(16px, env(safe-area-inset-right, 0px)); bottom: calc(10px + env(safe-area-inset-bottom, 0px)); gap: 14px; align-items: center; opacity: .55; }
+  .presentbar:hover { opacity: 1; }
+  body.present .presentbar { display: flex; }
   @media (prefers-reduced-motion: reduce) { .coin .face { transition: none; } }
 </style>
 
@@ -108,6 +122,10 @@
   <label class="opt"><input type="checkbox" id="zoom"> zoom y-axis</label>
   <label class="opt"><input type="checkbox" id="logx"> log x-axis</label>
   <button id="reset">Reset</button>
+  <button id="present">Present</button>
+</div>
+<div class="presentbar">
+  <span class="hint"><kbd>space</kbd> flip · <kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd> ×10/×100/×1000 · <kbd>A</kbd> auto · <kbd>R</kbd> reset · <kbd>P</kbd> plot · <kbd>Z</kbd> zoom · <kbd>L</kbd> log · <kbd>F</kbd> fullscreen · <kbd>esc</kbd> exit</span>
 </div>
 
 <script>
@@ -227,6 +245,35 @@
   $('flip100').addEventListener('click', () => flip(100));
   $('reset').addEventListener('click', () => { stopAuto(); n = 0; heads = 0; series = []; const f = $('face'); f.textContent = '?'; f.className = 'face'; update(); });
   ['mode', 'zoom', 'logx'].forEach(id => $(id).addEventListener('change', draw));
+
+  // Presentation mode: open with #present or the Present button; keyboard shortcuts below.
+  function setPresent(on) {
+    document.body.classList.toggle('present', on);
+    if (on) {
+      $('speed').value = '1';
+      if (document.documentElement.requestFullscreen && !document.fullscreenElement)
+        document.documentElement.requestFullscreen().catch(() => {});
+    } else if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {});
+    setTimeout(draw, 50);
+  }
+  $('present').addEventListener('click', () => setPresent(true));
+  if (location.hash === '#present') setPresent(true);
+  document.addEventListener('fullscreenchange', draw);
+  document.addEventListener('keydown', e => {
+    if (e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT') return;
+    const k = e.key.toLowerCase();
+    if (k === ' ') { e.preventDefault(); flip(1); }
+    else if (k === '1') flip(10);
+    else if (k === '2') flip(100);
+    else if (k === '3') flip(1000);
+    else if (k === 'a') $('auto').click();
+    else if (k === 'r') $('reset').click();
+    else if (k === 'p') { const m = $('mode'); m.value = m.value === 'pct' ? 'dev' : 'pct'; draw(); }
+    else if (k === 'z') { $('zoom').checked = !$('zoom').checked; draw(); }
+    else if (k === 'l') { $('logx').checked = !$('logx').checked; draw(); }
+    else if (k === 'f') { document.fullscreenElement ? document.exitFullscreen().catch(() => {}) : document.documentElement.requestFullscreen?.().catch(() => {}); }
+    else if (k === 'escape' && document.body.classList.contains('present')) setPresent(false);
+  });
   new ResizeObserver(draw).observe(canvas.parentElement);
   if (window.matchMedia) window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', draw);
   update();
