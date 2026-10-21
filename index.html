@@ -171,7 +171,7 @@
     ctx.clearRect(0, 0, W, H);
 
     const mode = $('mode').value, zoom = $('zoom').checked, logx = $('logx').checked;
-    const m = { l: 52, r: 18, t: 18, b: 34 };
+    const m = { l: 72, r: 18, t: 22, b: 46 };
     const pw = W - m.l - m.r, ph = H - m.t - m.b;
 
     // y range
@@ -200,11 +200,14 @@
     if (logx) { for (let p = 1; p <= N; p *= 10) ticks.push(p); if (ticks[ticks.length - 1] !== N) ticks.push(N); }
     else { const step = niceStep(N / 6); for (let v = step; v <= N; v += step) ticks.push(v); if (ticks.length === 0) ticks.push(N); }
     ticks.forEach(v => { const x = xOf(v); ctx.beginPath(); ctx.moveTo(x, m.t + ph); ctx.lineTo(x, m.t + ph + 4); ctx.strokeStyle = css('--line'); ctx.stroke(); ctx.fillText(v.toLocaleString(), x, m.t + ph + 8); });
-    ctx.textAlign = 'left';
-    ctx.fillText('flips →', m.l, 2);
 
     // axes
     ctx.strokeStyle = css('--line'); ctx.beginPath(); ctx.moveTo(m.l, m.t); ctx.lineTo(m.l, m.t + ph); ctx.lineTo(W - m.r, m.t + ph); ctx.stroke();
+    // axis titles
+    ctx.fillStyle = css('--muted'); ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    ctx.fillText('number of flips', m.l + pw / 2, H - 6);
+    ctx.save(); ctx.translate(14, m.t + ph / 2); ctx.rotate(-Math.PI / 2); ctx.textBaseline = 'top';
+    ctx.fillText((mode === 'pct' ? 'running % heads' : 'distance from 50% (pts)'), 0, 0); ctx.restore();
 
     // target line
     const target = mode === 'pct' ? 50 : 0;
