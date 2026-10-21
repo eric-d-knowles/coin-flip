@@ -1,0 +1,234 @@
+<title>Law of Large Numbers Coin Flips</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  /* Layout: a one-screen lecture panel; stat strip on top, plot fills the rest, controls pinned below. */
+  :root {
+    --bg: #f7f8fb;
+    --panel: #ffffff;
+    --fg: #16203a;
+    --muted: #5d6b8a;
+    --line: #d9deea;
+    --grid: #e8ebf3;
+    --accent: #1f4fd8;      /* the running % heads trace */
+    --target: #c0392b;      /* the 50% reference */
+    --heads: #d99a1e;
+    --tails: #7a8699;
+    --font-ui: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-num: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1422; --panel: #171d2f; --fg: #e8ecf7; --muted: #9aa6c4;
+      --line: #2a3350; --grid: #212a44; --accent: #6b93ff; --target: #ff6b5a;
+      --heads: #f0b23b; --tails: #8e9ab3; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f1422; --panel: #171d2f; --fg: #e8ecf7; --muted: #9aa6c4;
+    --line: #2a3350; --grid: #212a44; --accent: #6b93ff; --target: #ff6b5a;
+    --heads: #f0b23b; --tails: #8e9ab3; color-scheme: dark;
+  }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg); color: var(--fg); font-family: var(--font-ui);
+    display: flex; flex-direction: column; gap: 14px;
+    padding-block: 16px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    box-sizing: border-box;
+  }
+  .stats { display: flex; gap: 14px; flex-wrap: wrap; align-items: stretch; }
+  .stat {
+    flex: 1 1 160px; min-width: 0; background: var(--panel); border: 1px solid var(--line);
+    border-radius: 10px; padding: 12px 16px; display: flex; flex-direction: column; gap: 4px;
+  }
+  .stat .label { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 500; }
+  .stat .value { font-family: var(--font-num); font-size: clamp(28px, 5vw, 48px); font-weight: 500; font-variant-numeric: tabular-nums; line-height: 1.1; }
+  .stat .sub { font-family: var(--font-num); font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .stat.heads .value { color: var(--heads); }
+  .stat.pct .value { color: var(--accent); }
+  .coin {
+    flex: 0 0 auto; display: flex; align-items: center; justify-content: center;
+    width: 92px; min-height: 92px; border-radius: 10px; background: var(--panel); border: 1px solid var(--line);
+  }
+  .coin .face {
+    width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center;
+    font-family: var(--font-num); font-weight: 500; font-size: 26px; color: #fff;
+    background: var(--tails); transition: transform .18s ease;
+  }
+  .coin .face.heads { background: var(--heads); }
+  .coin .face.flip { transform: rotateY(180deg); }
+  .plot { flex: 1 1 auto; min-height: 220px; min-width: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; position: relative; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  button {
+    font: 500 15px var(--font-ui); color: var(--fg); background: var(--panel); border: 1px solid var(--line);
+    border-radius: 8px; padding: 9px 16px; cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  button.primary:hover { filter: brightness(1.08); }
+  .spacer { flex: 1 1 auto; }
+  label.opt { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; color: var(--muted); }
+  select { font: 14px var(--font-ui); color: var(--fg); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
+  @media (prefers-reduced-motion: reduce) { .coin .face { transition: none; } }
+</style>
+
+<div class="stats">
+  <div class="coin" aria-live="polite"><div class="face" id="face">?</div></div>
+  <div class="stat"><div class="label">Flips</div><div class="value" id="n">0</div><div class="sub">&nbsp;</div></div>
+  <div class="stat heads"><div class="label">Heads</div><div class="value" id="h">0</div><div class="sub" id="t">tails 0</div></div>
+  <div class="stat pct"><div class="label">Percent heads</div><div class="value" id="pct">—</div><div class="sub" id="dev">distance from 50%: —</div></div>
+</div>
+
+<div class="plot"><canvas id="c"></canvas></div>
+
+<div class="controls">
+  <button class="primary" id="flip1">Flip once</button>
+  <button id="flip10">Flip ×10</button>
+  <button id="flip100">Flip ×100</button>
+  <button id="auto">▶ Auto</button>
+  <label class="opt">speed
+    <select id="speed">
+      <option value="1">1 flip / tick</option>
+      <option value="5" selected>5 flips / tick</option>
+      <option value="25">25 flips / tick</option>
+      <option value="100">100 flips / tick</option>
+    </select>
+  </label>
+  <span class="spacer"></span>
+  <label class="opt">plot
+    <select id="mode">
+      <option value="pct" selected>% heads (converges to 50)</option>
+      <option value="dev">|% heads − 50| (converges to 0)</option>
+    </select>
+  </label>
+  <label class="opt"><input type="checkbox" id="zoom"> zoom y-axis</label>
+  <label class="opt"><input type="checkbox" id="logx"> log x-axis</label>
+  <button id="reset">Reset</button>
+</div>
+
+<script>
+(function () {
+  const $ = id => document.getElementById(id);
+  const canvas = $('c'), ctx = canvas.getContext('2d');
+  let n = 0, heads = 0, series = [], timer = null;
+
+  function css(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+
+  function flipOnce() {
+    const isHeads = Math.random() < 0.5;
+    n++; if (isHeads) heads++;
+    series.push(100 * heads / n);
+    return isHeads;
+  }
+  function flip(k) {
+    let last;
+    for (let i = 0; i < k; i++) last = flipOnce();
+    const face = $('face');
+    face.textContent = last ? 'H' : 'T';
+    face.classList.toggle('heads', last);
+    face.classList.toggle('flip', !face.classList.contains('flip'));
+    update();
+  }
+  function update() {
+    $('n').textContent = n.toLocaleString();
+    $('h').textContent = heads.toLocaleString();
+    $('t').textContent = 'tails ' + (n - heads).toLocaleString();
+    if (n) {
+      const p = 100 * heads / n;
+      $('pct').textContent = p.toFixed(n < 1000 ? 1 : 2) + '%';
+      $('dev').textContent = 'distance from 50%: ' + Math.abs(p - 50).toFixed(2) + ' pts';
+    } else { $('pct').textContent = '—'; $('dev').textContent = 'distance from 50%: —'; }
+    draw();
+  }
+
+  function draw() {
+    const dpr = window.devicePixelRatio || 1;
+    const W = canvas.clientWidth, H = canvas.clientHeight;
+    if (canvas.width !== W * dpr || canvas.height !== H * dpr) { canvas.width = W * dpr; canvas.height = H * dpr; }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+
+    const mode = $('mode').value, zoom = $('zoom').checked, logx = $('logx').checked;
+    const m = { l: 52, r: 18, t: 18, b: 34 };
+    const pw = W - m.l - m.r, ph = H - m.t - m.b;
+
+    // y range
+    let y0, y1;
+    if (mode === 'pct') { y0 = zoom ? 40 : 0; y1 = zoom ? 60 : 100; }
+    else { y0 = 0; y1 = zoom ? 10 : 50; }
+    // x range
+    const N = Math.max(n, 10);
+    const xOf = i => logx ? m.l + pw * Math.log10(i) / Math.log10(N) : m.l + pw * (i - 1) / Math.max(N - 1, 1);
+    const yOf = v => m.t + ph * (1 - (Math.min(Math.max(v, y0), y1) - y0) / (y1 - y0));
+
+    ctx.font = '12px ' + css('--font-num');
+    ctx.fillStyle = css('--muted'); ctx.strokeStyle = css('--grid'); ctx.lineWidth = 1;
+
+    // y grid
+    const ySteps = 5;
+    for (let k = 0; k <= ySteps; k++) {
+      const v = y0 + (y1 - y0) * k / ySteps, y = yOf(v);
+      ctx.beginPath(); ctx.moveTo(m.l, y); ctx.lineTo(W - m.r, y); ctx.stroke();
+      ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+      ctx.fillText(v + (mode === 'pct' ? '%' : ''), m.l - 8, y);
+    }
+    // x ticks
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    let ticks = [];
+    if (logx) { for (let p = 1; p <= N; p *= 10) ticks.push(p); if (ticks[ticks.length - 1] !== N) ticks.push(N); }
+    else { const step = niceStep(N / 6); for (let v = step; v <= N; v += step) ticks.push(v); if (ticks.length === 0) ticks.push(N); }
+    ticks.forEach(v => { const x = xOf(v); ctx.beginPath(); ctx.moveTo(x, m.t + ph); ctx.lineTo(x, m.t + ph + 4); ctx.strokeStyle = css('--line'); ctx.stroke(); ctx.fillText(v.toLocaleString(), x, m.t + ph + 8); });
+    ctx.textAlign = 'left';
+    ctx.fillText('flips →', m.l, 2);
+
+    // axes
+    ctx.strokeStyle = css('--line'); ctx.beginPath(); ctx.moveTo(m.l, m.t); ctx.lineTo(m.l, m.t + ph); ctx.lineTo(W - m.r, m.t + ph); ctx.stroke();
+
+    // target line
+    const target = mode === 'pct' ? 50 : 0;
+    ctx.setLineDash([6, 5]); ctx.strokeStyle = css('--target'); ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(m.l, yOf(target)); ctx.lineTo(W - m.r, yOf(target)); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = css('--target'); ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
+    ctx.fillText(mode === 'pct' ? 'expected: 50%' : 'expected: 0', W - m.r - 4, yOf(target) - 3);
+
+    if (!series.length) return;
+    // trace
+    ctx.strokeStyle = css('--accent'); ctx.lineWidth = 2; ctx.lineJoin = 'round';
+    ctx.beginPath();
+    // decimate for very long runs so the stroke stays fast
+    const stride = Math.max(1, Math.floor(series.length / (pw * 2)));
+    for (let i = 0; i < series.length; i += stride) {
+      const v = mode === 'pct' ? series[i] : Math.abs(series[i] - 50);
+      const x = xOf(i + 1), y = yOf(v);
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    const lastV = mode === 'pct' ? series[n - 1] : Math.abs(series[n - 1] - 50);
+    ctx.lineTo(xOf(n), yOf(lastV)); ctx.stroke();
+    // endpoint
+    ctx.fillStyle = css('--accent'); ctx.beginPath(); ctx.arc(xOf(n), yOf(lastV), 4, 0, Math.PI * 2); ctx.fill();
+  }
+  function niceStep(raw) {
+    const p = Math.pow(10, Math.floor(Math.log10(raw))); const f = raw / p;
+    return (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * p;
+  }
+
+  function stopAuto() { if (timer) { clearInterval(timer); timer = null; $('auto').textContent = '▶ Auto'; } }
+  $('auto').addEventListener('click', () => {
+    if (timer) return stopAuto();
+    $('auto').textContent = '⏸ Pause';
+    timer = setInterval(() => flip(+$('speed').value), 80);
+  });
+  $('flip1').addEventListener('click', () => flip(1));
+  $('flip10').addEventListener('click', () => flip(10));
+  $('flip100').addEventListener('click', () => flip(100));
+  $('reset').addEventListener('click', () => { stopAuto(); n = 0; heads = 0; series = []; const f = $('face'); f.textContent = '?'; f.className = 'face'; update(); });
+  ['mode', 'zoom', 'logx'].forEach(id => $(id).addEventListener('change', draw));
+  new ResizeObserver(draw).observe(canvas.parentElement);
+  if (window.matchMedia) window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', draw);
+  update();
+})();
+</script>
